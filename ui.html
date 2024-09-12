@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #fileList { margin-top: 10px; }
+    #fileList li { margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+  <h2>Upload Data List</h2>
+  <input type="file" id="fileInput" />
+  <button id="populate">Populate Text Layers</button>
+
+  <h3>Uploaded JSON Files</h3>
+  <ul id="fileList"></ul>
+
+  <script>
+    let uploadedFiles = [];
+
+    // Handle messages from the plugin code
+    window.onmessage = (event) => {
+      const message = event.data.pluginMessage;
+      console.log('Received message in UI:', message); // Add more detailed logging
+      if (message.type === 'loadFiles') {
+        uploadedFiles = message.storedFiles || [];
+        console.log('Files received in UI:', uploadedFiles);
+        displayUploadedFiles();
+      }
+    };
+
+    // Handle file input
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const dataList = JSON.parse(event.target.result);
+            if (Array.isArray(dataList) && dataList.length > 0) {
+              uploadedFiles.push({ name: file.name, content: dataList });
+              displayUploadedFiles();
+
+              parent.postMessage({ pluginMessage: { type: 'saveFiles', uploadedFiles } }, '*');
+              alert("Data loaded successfully!");
+            } else {
+              alert("Invalid data format. Please upload an array of strings.");
+            }
+          } catch (error) {
+            alert("Error parsing the file. Please ensure it is a valid JSON file.");
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    function displayUploadedFiles() {
+      console.log('got here');
+      const fileList = document.getElementById('fileList');
+      fileList.innerHTML = '';
+      uploadedFiles.forEach((file, index) => {
+        const li = document.createElement('li');
+        const button = document.createElement('button');
+        button.textContent = `Use ${file.name}`;
+        button.onclick = () => {
+          parent.postMessage({ pluginMessage: { type: 'populateText', dataList: file.content } }, '*');
+        };
+        li.appendChild(button);
+        fileList.appendChild(li);
+      });
+    }
+
+    document.getElementById('populate').addEventListener('click', () => {
+      if (uploadedFiles.length > 0) {
+        const latestFile = uploadedFiles[uploadedFiles.length - 1];
+        parent.postMessage({ pluginMessage: { type: 'populateText', dataList: latestFile.content } }, '*');
+      } else {
+        alert("Please upload a data list first.");
+      }
+    });
+  </script>
+</body>
+</html>
