@@ -1,83 +1,270 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    #fileList { margin-top: 10px; }
-    #fileList li { margin-bottom: 5px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="styles.css" /> 
+    <title>Text Populator</title>
+    <style>
+        /* Styles for the layout */
+        body {
+            font-family: Messina Sans, sans-serif;
+            font-size: 14px;
+            line-height: 24px; /* 171.429% */
+            letter-spacing: -0.48px;
+            padding: 0px;
+            margin: 0px;
+        }
+        .bodyContainer {
+            box-sizing: border-box;
+            background-color: #F8FAFC;
+            padding: 12px;
+            height: 500px;
+        }
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            background-color: white;
+            width: 100%;
+            box-sizing: border-box;
+            padding:12px;
+            border-top: 1px solid #EBEFF7;
+        }
+        .list-item {
+            cursor: pointer;
+            background-color: white;
+            padding: 8px;
+            border: 1px solid #EBEFF7;
+            margin-bottom: 6px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            border-radius: 6px;
+        }
+        .list-item:hover {
+            background-color: F5F8FF;
+            /* color: #265CFF; */
+        }
+        .list-item:hover .list-controls{
+            opacity: 1;
+        }
+        .list-item.selected {
+            /* color: #265CFF; */
+            background-color: #F5F8FF;
+            border: 1px solid #265CFF;
+        }
+        .list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+        .list-controls {
+            display: flex;
+            gap: 6px;
+            margin-left: auto;
+            opacity: 0;
+        }
+        .button {
+            background-color: #265CFF;
+            border: 1px solid #EBEFF7;
+            color: white;
+            padding: 8px 10px;
+            border: none;
+            cursor: pointer;
+            text-align: center;
+            border-radius: 6px;
+        }
+        .button:hover {
+            background-color: #1246E0;
+        }
+        .button:active {
+            background-color: #032CA5;
+        }
+        .button:disabled {
+            background-color: #93AEFF;
+        }
+        .secondaryButton {
+            background-color: white;
+            color: #041330;
+            padding: 8px 10px;
+            border: 1px solid #EBEFF7;
+            cursor: pointer;
+            text-align: center;
+            border-radius: 6px;
+        }
+        .secondaryButton:hover {
+            background-color: #F7F9FC;
+        }
+        .secondaryButton:active {
+            background-color: #EBEFF7;
+        }
+        .secondaryButton:disabled {
+            background-color: #93AEFF;
+        }
+        .edit-area {
+            display: none;
+            flex-direction: column;
+            width: 100%;
+            margin-top: 16px;
+        }
+        .edit-area input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #E2E6EE;
+            margin-bottom: 6px;
+            height: 32px;
+            border-radius: 6px;
+        }
+        .edit-area input:focus {
+            border: 1px solid var(--background-border, #E2E6EE);
+            background: var(--gray-white, #FFF);
+            outline: none;
+            /* Focus */
+            box-shadow: 0px 0px 0px 1px #FFF, 0px 0px 0px 2px #265CFF, 0px 1px 1px 0px rgba(79, 89, 110, 0.08);
+        }
+        .edit-area textarea {
+            font-family: Messina Sans, sans-serif;
+            font-size: 14px;
+            line-height: 24px; /* 171.429% */
+            letter-spacing: -0.48px;
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #E2E6EE;
+            margin-bottom: 8px;
+            height: 120px;
+            border-radius: 6px;
+        }
+        .edit-area textarea:focus {
+            border: 1px solid var(--background-border, #E2E6EE);
+            background: var(--gray-white, #FFF);
+            outline: none;
+            /* Focus */
+            box-shadow: 0px 0px 0px 1px #FFF, 0px 0px 0px 2px #265CFF, 0px 1px 1px 0px rgba(79, 89, 110, 0.08);
+        }
+    </style>
 </head>
 <body>
-  <h2>Upload Data List</h2>
-  <input type="file" id="fileInput" />
-  <button id="populate">Populate Text Layers</button>
+    <div id="listContainer" class="bodyContainer"></div>
+    <input type="file" id="fileInput" accept=".txt" style="display: none;" />
+    <div id="footer" class="footer">
+        <button class="secondaryButton" id="uploadListBtn">Upload List</button>
+        <button class="button" id="populateBtn" disabled>Populate Text Layers</button>
+    </div>
 
-  <h3>Uploaded JSON Files</h3>
-  <ul id="fileList"></ul>
+    <script>
+        const listContainer = document.getElementById('listContainer');
+        const populateBtn = document.getElementById('populateBtn');
+        const uploadListBtn = document.getElementById('uploadListBtn');
+        let selectedListId = null;
 
-  <script>
-    let uploadedFiles = [];
+        // Handle loadLists from plugin
+        window.onmessage = (event) => {
+            const { type, stringLists } = event.data.pluginMessage;
+            if (type === 'loadLists') {
+                listContainer.innerHTML = '';
+                stringLists.forEach(list => {
+                    const listItem = document.createElement('div');
+                    listItem.classList.add('list-item');
 
-    // Handle messages from the plugin code
-    window.onmessage = (event) => {
-      const message = event.data.pluginMessage;
-      console.log('Received message in UI:', message); // Add more detailed logging
-      if (message.type === 'loadFiles') {
-        uploadedFiles = message.storedFiles || [];
-        console.log('Files received in UI:', uploadedFiles);
-        displayUploadedFiles();
-      }
-    };
+                    // Create a container for list name and controls
+                    const listHeader = document.createElement('div');
+                    listHeader.classList.add('list-header');
 
-    // Handle file input
-    document.getElementById('fileInput').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          try {
-            const dataList = JSON.parse(event.target.result);
-            if (Array.isArray(dataList) && dataList.length > 0) {
-              uploadedFiles.push({ name: file.name, content: dataList });
-              displayUploadedFiles();
+                    // Add list name
+                    const listName = document.createElement('span');
+                    listName.textContent = list.name;
 
-              parent.postMessage({ pluginMessage: { type: 'saveFiles', uploadedFiles } }, '*');
-              alert("Data loaded successfully!");
-            } else {
-              alert("Invalid data format. Please upload an array of strings.");
+                    // Create controls for edit and delete
+                    const controls = document.createElement('div');
+                    controls.classList.add('list-controls');
+
+                    const editBtn = document.createElement('button');
+                    editBtn.classList.add('secondaryButton');
+                    editBtn.textContent = 'Edit';
+                    editBtn.addEventListener('click', () => {
+                        toggleEditArea(listItem, list);
+                    });
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.classList.add('secondaryButton');
+                    deleteBtn.textContent = 'Delete';
+                    deleteBtn.addEventListener('click', () => {
+                        parent.postMessage({ pluginMessage: { type: 'delete', listId: list.id } }, '*');
+                    });
+
+                    controls.appendChild(editBtn);
+                    controls.appendChild(deleteBtn);
+
+                    // Append the name and controls to the header
+                    listHeader.appendChild(listName);
+                    listHeader.appendChild(controls);
+                    listItem.appendChild(listHeader);
+
+                    // Create and append the edit area container
+                    const editArea = document.createElement('div');
+                    editArea.classList.add('edit-area');
+                    listItem.appendChild(editArea);
+
+                    listItem.addEventListener('click', () => {
+                        document.querySelectorAll('.list-item').forEach(item => item.classList.remove('selected'));
+                        listItem.classList.add('selected');
+                        selectedListId = list.id;
+                        populateBtn.disabled = false;
+                    });
+
+                    // Add to list container
+                    listContainer.appendChild(listItem);
+                });
             }
-          } catch (error) {
-            alert("Error parsing the file. Please ensure it is a valid JSON file.");
-          }
         };
-        reader.readAsText(file);
-      }
-    });
 
-    function displayUploadedFiles() {
-      console.log('got here');
-      const fileList = document.getElementById('fileList');
-      fileList.innerHTML = '';
-      uploadedFiles.forEach((file, index) => {
-        const li = document.createElement('li');
-        const button = document.createElement('button');
-        button.textContent = `Use ${file.name}`;
-        button.onclick = () => {
-          parent.postMessage({ pluginMessage: { type: 'populateText', dataList: file.content } }, '*');
-        };
-        li.appendChild(button);
-        fileList.appendChild(li);
-      });
-    }
+        function toggleEditArea(listItem, list) {
+            const editArea = listItem.querySelector('.edit-area');
+            if (editArea.style.display === 'flex') {
+                editArea.style.display = 'none'; // Hide if visible
+            } else {
+                editArea.innerHTML = `
+                    <input type="text" value="${list.name}" id="edit-name" />
+                    <textarea id="edit-items">${list.items.join('\n')}</textarea>
+                    <button id="saveBtn" class="button" >Save</button>
+                `;
+                editArea.style.display = 'flex';
 
-    document.getElementById('populate').addEventListener('click', () => {
-      if (uploadedFiles.length > 0) {
-        const latestFile = uploadedFiles[uploadedFiles.length - 1];
-        parent.postMessage({ pluginMessage: { type: 'populateText', dataList: latestFile.content } }, '*');
-      } else {
-        alert("Please upload a data list first.");
-      }
-    });
-  </script>
+                // Handle saving changes
+                document.getElementById('saveBtn').addEventListener('click', () => {
+                    const newName = document.getElementById('edit-name').value;
+                    const newItems = document.getElementById('edit-items').value.split('\n').map(line => line.trim()).filter(Boolean);
+                    parent.postMessage({ pluginMessage: { type: 'edit', listId: list.id, newName, newItems } }, '*');
+                });
+            }
+        }
+
+        // Upload list functionality
+        uploadListBtn.addEventListener('click', () => {
+            const fileInput = document.getElementById('fileInput');
+            fileInput.click();
+        });
+
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const fileContents = event.target.result;
+                    parent.postMessage({ pluginMessage: { type: 'upload', fileName: file.name, fileContents } }, '*');
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Populate text layers functionality
+        populateBtn.addEventListener('click', () => {
+            if (selectedListId) {
+                parent.postMessage({ pluginMessage: { type: 'populate', selectedListId } }, '*');
+            }
+        });
+    </script>
 </body>
 </html>

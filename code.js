@@ -1,74 +1,82 @@
-// Function to save data to clientStorage
-async function saveData(key, data) {
-    try {
-      await figma.clientStorage.setAsync(key, data);
-      console.log(`Data saved under key: ${key}`, data); // Check what data is being saved
-    } catch (error) {
-      console.error('Error saving data:', error);
-    }
-  }
-  
-  
-  // Function to load data from clientStorage
-  async function loadData(key) {
-    try {
-      const data = await figma.clientStorage.getAsync(key);
-      console.log(`Data loaded from key: ${key}`, data); // Check what data is loaded
-      return data;
-    } catch (error) {
-      console.error('Error loading data:', error);
-      return null;
-    }
-  }
-  
-  
-  // Handle messages from the UI
-  figma.ui.onmessage = async (msg) => {
-    if (msg.type === 'saveFiles') {
-      try {
-        await saveData('uploadedFiles', msg.uploadedFiles);
-        console.log("Files saved successfully!"); // Debugging save confirmation
-      } catch (error) {
-        console.error('Error saving files:', error);
-      }
-    }
-  
-    if (msg.type === 'loadFiles') {
-      console.log('Received loadFiles message'); // Check if message is received
-      try {
-        const storedFiles = await loadData('uploadedFiles') || [];
-        console.log('Loaded files from storage:', storedFiles); // Debug loaded files
-        figma.ui.onmessage({ type: 'loadedFiles', storedFiles });
-      } catch (error) {
-        console.error('Error loading files:', error);
-      }
-    }
-  
-    if (msg.type === 'populateText') {
-      const { dataList } = msg;
-      const selectedTextLayers = figma.currentPage.selection.filter(node => node.type === 'TEXT');
-  
-      if (selectedTextLayers.length === 0) {
-        figma.notify("Please select at least one text layer");
-        return;
-      }
-  
-      for (let i = 0; i < selectedTextLayers.length && i < dataList.length; i++) {
-        const textNode = selectedTextLayers[i];
-        if (textNode.type === 'TEXT') {
-          await figma.loadFontAsync(textNode.fontName);  // Ensure the font is loaded
-          textNode.characters = dataList[i];
+figma.showUI(__html__, { width: 400, height: 560 });
+
+// Initialize storage and state
+let stringLists = [];
+let selectedListId = null;
+
+async function loadSavedData() {
+    const savedLists = await figma.clientStorage.getAsync('stringLists');
+    stringLists = savedLists || getDefaultStringLists();
+    sendStringListsToUI();
+}
+
+function getDefaultStringLists() {
+    return [
+        { id: generateId(), name: 'Default List 1', items: ['Apple', 'Banana', 'Orange'] },
+        { id: generateId(), name: 'Default List 2', items: ['Alpha', 'Beta', 'Gamma'] },
+        { id: generateId(), name: 'Default List 3', items: ['Cat', 'Dog', 'Elephant'] }
+    ];
+}
+
+function sendStringListsToUI() {
+    figma.ui.postMessage({ type: 'loadLists', stringLists });
+}
+
+function generateId() {
+    return Math.floor(Math.random() * 1000000).toString();
+}
+
+// Handle messages from UI
+figma.ui.onmessage = async (msg) => {
+    if (msg.type === 'populate') {
+        const selectedList = stringLists.find(list => list.id === msg.selectedListId);
+        if (selectedList) {
+            const selectedTextLayers = figma.currentPage.selection.filter(node => node.type === 'TEXT');
+            
+            if (selectedTextLayers.length === 0) {
+                figma.notify("Please select at least one text layer.");
+                return;
+            }
+
+            for (const layer of selectedTextLayers) {
+                const font = layer.fontName;
+
+                // Load the font dynamically for each selected text layer
+                await figma.loadFontAsync(font);
+
+                const selectedListString = selectedList.items[selectedTextLayers.indexOf(layer) % selectedList.items.length];
+                layer.characters = selectedListString;
+            }
+
+            figma.notify("Text layers populated successfully.");
+        } else {
+            figma.notify("No string list selected.");
         }
-      }
-  
-      figma.notify("Text layers populated successfully!");
+    } else if (msg.type === 'delete') {
+        stringLists = stringLists.filter(list => list.id !== msg.listId);
+        await figma.clientStorage.setAsync('stringLists', stringLists);
+        sendStringListsToUI();
+    } else if (msg.type === 'edit') {
+        const list = stringLists.find(list => list.id === msg.listId);
+        if (list) {
+            list.name = msg.newName;
+            list.items = msg.newItems;
+            await figma.clientStorage.setAsync('stringLists', stringLists);
+            sendStringListsToUI();
+        }
+    } else if (msg.type === 'upload') {
+        const fileName = msg.fileName;
+        const fileContents = msg.fileContents.split('\n').map(line => line.trim()).filter(Boolean);
+        const newList = {
+            id: generateId(),
+            name: fileName,
+            items: fileContents
+        };
+        stringLists.push(newList);
+        await figma.clientStorage.setAsync('stringLists', stringLists);
+        sendStringListsToUI();
     }
-  };
-  
-  // Show the UI
-  figma.showUI(__html__, { width: 300, height: 400 });
-  
-  // Load stored files when the plugin opens
-  console.log('Sending loadFiles message to UI'); // Debug message sending
-  figma.ui.postMessage({ type: 'loadFiles' });
-  
+};
+
+// Load saved data when the plugin is opened
+loadSavedData();
